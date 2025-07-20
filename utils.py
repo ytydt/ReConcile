@@ -11,7 +11,7 @@ from tqdm import tqdm
 from collections import Counter
 
 random.seed(1234)
-datasets = ["SQA", "GSM8k", "ECQA", "Aqua"]
+datasets = ["SQA", "GSM8k", "ECQA", "Aqua", "CollegeMath"]
 
 def prepare_context(test_sample, convincing_samples=None, intervene=False, dataset="SQA"):
     assert dataset in datasets
@@ -25,7 +25,7 @@ def prepare_context(test_sample, convincing_samples=None, intervene=False, datas
     else:
         context.append("Q: " + test_sample['question'])
 
-    if dataset in ["ECQA", "Aqua", "ScienceQA"]:
+    if dataset in ["ECQA", "Aqua", "CollegeMath", "ScienceQA"]:
         context.append("The options are: {}. Please select an option as your answer.".format(" ".join(test_sample["options"])))
         
     context.append("Please answer the question with step-by-step reasoning.")
@@ -55,7 +55,7 @@ def prepare_context_for_chat_assistant(sample, convincing_samples=None, interven
     else:
         contexts.append({"role": "user", "content": f"Q: {sample['question']}"})
         
-    if dataset in ["ECQA", "Aqua"]:
+    if dataset in ["ECQA", "Aqua", "CollegeMath"]:
         contexts[-1]["content"] += "The options are: {}. Please select an option as your answer.".format(" ".join(sample["options"]))
         
     contexts[-1]["content"] += " Please answer the question with step-by-step reasoning."
@@ -68,8 +68,8 @@ def prepare_context_for_chat_assistant(sample, convincing_samples=None, interven
         contexts[-1]["content"] += " Only place a single numeric value in the \"answer\" field."
     elif dataset == "ECQA":
         contexts[-1]["content"] += " Only place 1,2,3,4,5 representing your choice in the \"answer\" field."
-    elif dataset == "Aqua":
-        contexts[-1]["content"] += " Only place A,B,C,D,E representing your choice in the \"answer\" field."    
+    elif dataset == "Aqua" or dataset == "CollegeMath":
+        contexts[-1]["content"] += " Only place A,B,C,D,E representing your choice in the \"answer\" field."
     contexts[-1]["content"] += " Do not output irrelevant content."
     return contexts
 
@@ -85,7 +85,7 @@ def prepare_context_for_bard(test_sample, convincing_samples=None, intervene=Fal
     else:
         context.append("Q: " + test_sample['question'])
         
-    if dataset in ["ECQA", "Aqua"]:
+    if dataset in ["ECQA", "Aqua", "CollegeMath"]:
         context.append("The options are: {}. Please select an option as your answer.".format(" ".join(test_sample["options"])))  
         
     context.append("Please answer the question with step-by-step reasoning.")
@@ -98,7 +98,7 @@ def prepare_context_for_bard(test_sample, convincing_samples=None, intervene=Fal
         context.append("Only place a single numeric value in the \"answer\" field. Do not output irrelevant content.")
     elif dataset == "ECQA":
         context.append("Only place 1,2,3,4,5 representing your choice in the \"answer\" field.")
-    elif dataset == "Aqua":
+    elif dataset == "Aqua" or dataset == "CollegeMath":
         context.append("Only place A,B,C,D,E representing your choice in the \"answer\" field.")
     context.append("Do not output irrelevant content.")
     return "\n".join(context), convincing_icx, unhelpful_icx
@@ -116,7 +116,7 @@ def invalid_result(dataset):
         result = {"reasoning": "",
           "answer": np.random.choice(['1', '2', '3', '4', '5']),
           "confidence_level": 0.0}   
-    elif dataset=="Aqua":
+    elif dataset in ["Aqua", "CollegeMath"]:
         result = {"reasoning": "",
           "answer": np.random.choice(['A', 'B', 'C', 'D', 'E']),
           "confidence_level": 0.0}
@@ -211,7 +211,7 @@ def clean_output(all_results, rounds, dataset):
                 elif dataset=="ECQA":
                     if 'answer' not in i[o]:
                         i[o]['answer'] = np.random.choice(['1', '2', '3', '4', '5'])
-                elif dataset=="Aqua":
+                elif dataset in ["Aqua", "CollegeMath"]:
                     if 'answer' not in i[o]:
                         i[o]['answer'] = np.random.choice(['A', 'B', 'C', 'D', 'E'])
                         

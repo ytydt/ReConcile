@@ -8,7 +8,7 @@ import numpy as np
 from utils import *
 from generation import *
 from tqdm import tqdm
-from data_utils import StrategyQA, GSM8k, Aqua, ECQA
+from data_utils import StrategyQA, GSM8k, Aqua, ECQA, CollegeMath
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -16,6 +16,9 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='SQA', type=str)
     parser.add_argument('--num_samples', default=100, type=int)
     parser.add_argument('--round', default=2, type=int)
+    parser.add_argument('--gpt-model', default='gpt-35-turbo', type=str)
+    parser.add_argument('--gpt-base-url', default=None, type=str)
+    parser.add_argument('--workers', default=1, type=int, help='Number of concurrent GPT requests')
     args = parser.parse_args()
 
     if args.dataset == "SQA":
@@ -26,16 +29,23 @@ if __name__ == '__main__':
         data = GSM8k(data_dir=f'./dataset/{args.dataset}')
     elif args.dataset == "Aqua":
         data = Aqua(data_dir=f'./dataset/{args.dataset}')
+    elif args.dataset == "CollegeMath":
+        data = CollegeMath(data_path='./college_mathematics_test.csv')
 
     test_samples = data.get_test_samples()[:args.num_samples]
     print(f"Number of test samples={len(test_samples)}")
 
-    with open(f'convincing/{args.dataset}/chatgpt.json', 'r') as f:
-        convincing_gpt = json.load(f)
-    with open(f'convincing/{args.dataset}/claude.json', 'r') as f:
-        convincing_claude = json.load(f)
-    with open(f'convincing/{args.dataset}/bard.json', 'r') as f:
-        convincing_bard = json.load(f)
+    try:
+        with open(f'convincing/{args.dataset}/chatgpt.json', 'r') as f:
+            convincing_gpt = json.load(f)
+        with open(f'convincing/{args.dataset}/claude.json', 'r') as f:
+            convincing_claude = json.load(f)
+        with open(f'convincing/{args.dataset}/bard.json', 'r') as f:
+            convincing_bard = json.load(f)
+    except FileNotFoundError:
+        convincing_gpt = []
+        convincing_claude = []
+        convincing_bard = []
 
     claude = ClaudeModel()
 
@@ -65,21 +75,24 @@ if __name__ == '__main__':
         break
 
     gpt_result = []
-    for test_sample in tqdm(test_samples[len(gpt_result):]):
-        tmp = {}
-        tmp['gold_answer'] = test_sample['answer']
+    def gpt_task(test_sample):
         try:
             result = gpt_gen_ans(test_sample,
-                                convincing_samples=convincing_claude+convincing_bard,
-                                additional_instruc=None,
-                                intervene=False,
-                                dataset=args.dataset)
+                                 convincing_samples=convincing_claude+convincing_bard,
+                                 additional_instruc=None,
+                                 intervene=False,
+                                 dataset=args.dataset,
+                                 model=args.gpt_model,
+                                 base_url=args.gpt_base_url)
         except InvalidRequestError:
             print("blocked by Azure OpenAI’s content management policy.")
             result = invalid_result(args.dataset)
-        tmp['prediction'] = result
-        gpt_result.append(tmp)
-        time.sleep(1)
+        return {'gold_answer': test_sample['answer'], 'prediction': result}
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        for out in tqdm(executor.map(gpt_task, test_samples[len(gpt_result):])):
+            gpt_result.append(out)
    
     bard_result = []
     for test_sample in tqdm(test_samples[len(bard_result):]):
@@ -127,7 +140,10 @@ if __name__ == '__main__':
                             all_results,
                             rounds=r,
                             convincing_samples=convincing_claude+convincing_bard,
-                            dataset=args.dataset)
+                            dataset=args.dataset,
+                            model=args.gpt_model,
+                            base_url=args.gpt_base_url,
+                            workers=args.workers)
 
         all_results = bard_debate(test_samples,
                             all_results,
@@ -141,3 +157,4 @@ if __name__ == '__main__':
 
     with open(f'{args.dataset}_round_{args.round}.pkl', 'wb') as f:
         pickle.dump(all_results, f)
+

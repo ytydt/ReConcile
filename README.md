@@ -41,7 +41,7 @@ Next, run the following command to start:
 python run.py --num_samples 100 --dataset SQA
 ````
 
-Currently, dataset can be ```["SQA", "GSM8k", "ECQA", "Aqua"]``` 
+Currently, dataset can be ```["SQA", "GSM8k", "ECQA", "Aqua", "CollegeMath"]```
 
 # Dataset
 The datasets used in this work are already included in the ```dataset``` folder.
