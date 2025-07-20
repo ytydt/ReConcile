@@ -11,7 +11,7 @@ from tqdm import tqdm
 from collections import Counter
 
 random.seed(1234)
-datasets = ["SQA", "GSM8k", "ECQA", "Aqua"]
+datasets = ["SQA", "GSM8k", "ECQA", "Aqua", "CollegeMath"]
 
 def prepare_context(test_sample, convincing_samples=None, intervene=False, dataset="SQA"):
     assert dataset in datasets

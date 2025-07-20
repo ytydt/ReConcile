@@ -101,4 +101,33 @@ class ECQA:
 
     def get_test_samples(self):
         return self.get_samples(self.test_path)
+
+
+class CollegeMath:
+    """Dataset loader for college_mathematics_test.csv."""
+
+    def __init__(self, data_path):
+        self.test_path = data_path
+
+    def get_samples(self, file_path):
+        samples = []
+        import csv
+        with open(file_path, newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for index, row in enumerate(reader):
+                question = row[0]
+                options = row[1:-1]
+                answer = row[-1]
+                samples.append({
+                    "index": index,
+                    "question": question,
+                    "options": options,
+                    "answer": answer,
+                    "gold_explanation": ""
+                })
+
+        return samples
+
+    def get_test_samples(self):
+        return self.get_samples(self.test_path)
     

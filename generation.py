@@ -113,14 +113,22 @@ class ClaudeModel:
         return all_results
 
 @backoff.on_exception(backoff.expo, (RateLimitError, APIError, ServiceUnavailableError, APIConnectionError, ValueError), max_tries=5)
-def gpt_gen_ans(sample, convincing_samples=None, additional_instruc=None, intervene=False, dataset="SQA"):
+def gpt_gen_ans(sample, convincing_samples=None, additional_instruc=None, intervene=False, dataset="SQA", model="gpt-35-turbo", base_url=None):
+    """Generate an answer using GPT based models."""
     contexts = prepare_context_for_chat_assistant(sample, convincing_samples, intervene, dataset)
     if additional_instruc:
         contexts[-1]['content'] += " ".join(additional_instruc)
-    # print(contexts)
-    completion = openai.ChatCompletion.create(
-              engine="gpt-35-turbo",
-              messages=contexts)
+
+    if base_url:
+        openai.api_base = base_url
+
+    create_kwargs = {"messages": contexts}
+    if openai.api_type == "azure":
+        create_kwargs["engine"] = model
+    else:
+        create_kwargs["model"] = model
+
+    completion = openai.ChatCompletion.create(**create_kwargs)
     
     output = completion['choices'][0]['message']['content']
     if output:
@@ -174,20 +182,29 @@ def bard_gen_ans(sample, convincing_samples=None, additional_instruc=None, inter
         result['answer'] = str(result['answer'])
     return result
 
-def gpt_debate(test_samples, all_results, rounds, convincing_samples, dataset):
+def gpt_debate(test_samples, all_results, rounds, convincing_samples, dataset, model="gpt-35-turbo", base_url=None, workers=1):
     r = '_' + str(rounds-1)
-    for i, s in tqdm(enumerate(all_results)):
+    indices = []
+    instructs = []
+    for i, s in enumerate(all_results):
         if 'gpt3_output_'+str(rounds) not in s and 'debate_prompt'+ r in s and len(s['debate_prompt'+r]):
             additional_instruc = ["\n\nCarefully review the following solutions from other agents as additional information, and provide your own answer and step-by-step reasoning to the question."]
             additional_instruc.append("Clearly states that which pointview do you agree or disagree and why.\n\n")
             additional_instruc.append(s['debate_prompt'+r])
             additional_instruc.append("Output your answer in json format, with the format as follows: {\"reasoning\": \"\", \"answer\": \"\", \"confidence_level\": \"\"}. Please strictly output in JSON format.")
-            result = gpt_gen_ans(test_samples[i],
-                                 convincing_samples=convincing_samples,
-                                 additional_instruc=additional_instruc,
-                                 intervene=False,
-                                 dataset=dataset)            
-            s['gpt3_output_'+str(rounds)] = result
+            indices.append(i)
+            instructs.append(additional_instruc)
+
+    def worker(args):
+        idx, instruc = args
+        res = gpt_gen_ans(test_samples[idx], convincing_samples=convincing_samples, additional_instruc=instruc, intervene=False, dataset=dataset, model=model, base_url=base_url)
+        return idx, res
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for idx, res in executor.map(worker, zip(indices, instructs)):
+            all_results[idx]['gpt3_output_'+str(rounds)] = res
+
     return all_results
 
 def bard_debate(test_samples, all_results, rounds, convincing_samples, dataset):
